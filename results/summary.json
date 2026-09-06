@@ -1,0 +1,361 @@
+{
+  "strategy": {
+    "ceilings": {
+      "basic": 7,
+      "frontier": 2,
+      "hardened": 3,
+      "naive": 20
+    },
+    "static_replay/naive": {
+      "recall_pct": 29.7,
+      "recall_ci": [
+        28.0,
+        31.3
+      ],
+      "mean_findings": 5.93,
+      "n": 15
+    },
+    "static_replay/basic": {
+      "recall_pct": 39.0,
+      "recall_ci": [
+        36.2,
+        41.9
+      ],
+      "mean_findings": 2.73,
+      "n": 15
+    },
+    "static_replay/hardened": {
+      "recall_pct": 8.9,
+      "recall_ci": [
+        2.2,
+        17.8
+      ],
+      "mean_findings": 0.27,
+      "n": 15
+    },
+    "static_replay/frontier": {
+      "recall_pct": 13.3,
+      "recall_ci": [
+        3.3,
+        23.3
+      ],
+      "mean_findings": 0.27,
+      "n": 15
+    },
+    "random_mutation/naive": {
+      "recall_pct": 44.7,
+      "recall_ci": [
+        44.0,
+        45.0
+      ],
+      "mean_findings": 8.93,
+      "n": 15
+    },
+    "random_mutation/basic": {
+      "recall_pct": 78.1,
+      "recall_ci": [
+        74.3,
+        81.9
+      ],
+      "mean_findings": 5.47,
+      "n": 15
+    },
+    "random_mutation/hardened": {
+      "recall_pct": 73.3,
+      "recall_ci": [
+        66.7,
+        80.0
+      ],
+      "mean_findings": 2.2,
+      "n": 15
+    },
+    "random_mutation/frontier": {
+      "recall_pct": 63.3,
+      "recall_ci": [
+        53.3,
+        76.7
+      ],
+      "mean_findings": 1.27,
+      "n": 15
+    },
+    "guided_no_bandit/naive": {
+      "recall_pct": 76.3,
+      "recall_ci": [
+        71.3,
+        81.7
+      ],
+      "mean_findings": 15.27,
+      "n": 15
+    },
+    "guided_no_bandit/basic": {
+      "recall_pct": 79.0,
+      "recall_ci": [
+        72.4,
+        83.8
+      ],
+      "mean_findings": 5.53,
+      "n": 15
+    },
+    "guided_no_bandit/hardened": {
+      "recall_pct": 84.4,
+      "recall_ci": [
+        75.6,
+        93.3
+      ],
+      "mean_findings": 2.53,
+      "n": 15
+    },
+    "guided_no_bandit/frontier": {
+      "recall_pct": 70.0,
+      "recall_ci": [
+        56.7,
+        83.3
+      ],
+      "mean_findings": 1.4,
+      "n": 15
+    },
+    "coverage_guided/naive": {
+      "recall_pct": 75.3,
+      "recall_ci": [
+        68.3,
+        82.3
+      ],
+      "mean_findings": 15.07,
+      "n": 15
+    },
+    "coverage_guided/basic": {
+      "recall_pct": 81.9,
+      "recall_ci": [
+        75.2,
+        88.6
+      ],
+      "mean_findings": 5.73,
+      "n": 15
+    },
+    "coverage_guided/hardened": {
+      "recall_pct": 73.3,
+      "recall_ci": [
+        64.4,
+        82.2
+      ],
+      "mean_findings": 2.2,
+      "n": 15
+    },
+    "coverage_guided/frontier": {
+      "recall_pct": 76.7,
+      "recall_ci": [
+        63.3,
+        90.0
+      ],
+      "mean_findings": 1.53,
+      "n": 15
+    }
+  },
+  "effect_sizes": {
+    "naive/static_replay": {
+      "a12": 1.0,
+      "p": 0.0,
+      "lift_pct": 153.9
+    },
+    "naive/random_mutation": {
+      "a12": 1.0,
+      "p": 0.0,
+      "lift_pct": 68.7
+    },
+    "naive/guided_no_bandit": {
+      "a12": 0.476,
+      "p": 0.818,
+      "lift_pct": -1.3
+    },
+    "basic/static_replay": {
+      "a12": 1.0,
+      "p": 0.0,
+      "lift_pct": 109.8
+    },
+    "basic/random_mutation": {
+      "a12": 0.578,
+      "p": 0.4304,
+      "lift_pct": 4.9
+    },
+    "basic/guided_no_bandit": {
+      "a12": 0.529,
+      "p": 0.7712,
+      "lift_pct": 3.6
+    },
+    "hardened/static_replay": {
+      "a12": 0.991,
+      "p": 0.0,
+      "lift_pct": 725.0
+    },
+    "hardened/random_mutation": {
+      "a12": 0.507,
+      "p": 0.9356,
+      "lift_pct": 0.0
+    },
+    "hardened/guided_no_bandit": {
+      "a12": 0.351,
+      "p": 0.1097,
+      "lift_pct": -13.2
+    },
+    "frontier/static_replay": {
+      "a12": 0.938,
+      "p": 0.0,
+      "lift_pct": 475.0
+    },
+    "frontier/random_mutation": {
+      "a12": 0.633,
+      "p": 0.1427,
+      "lift_pct": 21.1
+    },
+    "frontier/guided_no_bandit": {
+      "a12": 0.567,
+      "p": 0.4718,
+      "lift_pct": 9.5
+    }
+  },
+  "detectors": {
+    "heuristic": {
+      "roc_auc": 0.979,
+      "pr_auc": 0.9958,
+      "best_f1": 0.972,
+      "precision": 1.0,
+      "recall": 0.945,
+      "threshold": 0.389,
+      "n": 8400,
+      "prevalence": 0.594
+    },
+    "canary": {
+      "roc_auc": 0.667,
+      "pr_auc": 0.9124,
+      "best_f1": 0.745,
+      "precision": 0.594,
+      "recall": 1.0,
+      "threshold": 0.0,
+      "n": 8400,
+      "prevalence": 0.594
+    },
+    "ensemble": {
+      "roc_auc": 0.979,
+      "pr_auc": 0.9958,
+      "best_f1": 0.972,
+      "precision": 1.0,
+      "recall": 0.945,
+      "threshold": 0.389,
+      "n": 8400,
+      "prevalence": 0.594
+    }
+  },
+  "defenses": {
+    "baseline_mean": 15.07,
+    "single": {
+      "injection_filter": {
+        "mean_findings": 14.2,
+        "reduction_pct": 5.8
+      },
+      "tool_allowlist": {
+        "mean_findings": 6.6,
+        "reduction_pct": 56.2
+      },
+      "path_canonicalization": {
+        "mean_findings": 11.87,
+        "reduction_pct": 21.2
+      },
+      "egress_filter": {
+        "mean_findings": 11.4,
+        "reduction_pct": 24.3
+      },
+      "input_decoding": {
+        "mean_findings": 14.93,
+        "reduction_pct": 0.9
+      },
+      "spotlighting": {
+        "mean_findings": 14.2,
+        "reduction_pct": 5.8
+      },
+      "rate_limit": {
+        "mean_findings": 14.6,
+        "reduction_pct": 3.1
+      }
+    },
+    "cumulative": {
+      "injection_filter": 14.2,
+      "injection_filter+tool_allowlist": 5.73,
+      "injection_filter+tool_allowlist+path_canonicalization": 3.67,
+      "injection_filter+tool_allowlist+path_canonicalization+egress_filter": 2.93,
+      "injection_filter+tool_allowlist+path_canonicalization+egress_filter+input_decoding": 2.53,
+      "injection_filter+tool_allowlist+path_canonicalization+egress_filter+input_decoding+spotlighting": 2.33,
+      "injection_filter+tool_allowlist+path_canonicalization+egress_filter+input_decoding+spotlighting+rate_limit": 1.67
+    }
+  },
+  "ablation": {
+    "metric": "yardstick_coverage_and_findings",
+    "basic": {
+      "all": {
+        "yardstick_cov": 351.6,
+        "findings": 4.2
+      },
+      "none": {
+        "yardstick_cov": 294.6,
+        "findings": 4.5
+      },
+      "action_only": {
+        "yardstick_cov": 302.4,
+        "findings": 5.0
+      },
+      "no_action": {
+        "yardstick_cov": 352.4,
+        "findings": 4.7
+      },
+      "no_transition": {
+        "yardstick_cov": 355.5,
+        "findings": 4.5
+      },
+      "no_guardrail": {
+        "yardstick_cov": 338.5,
+        "findings": 4.6
+      },
+      "no_fault": {
+        "yardstick_cov": 356.4,
+        "findings": 4.8
+      },
+      "no_novelty": {
+        "yardstick_cov": 349.7,
+        "findings": 4.7
+      }
+    },
+    "hardened": {
+      "all": {
+        "yardstick_cov": 333.3,
+        "findings": 2.1
+      },
+      "none": {
+        "yardstick_cov": 287.8,
+        "findings": 1.8
+      },
+      "action_only": {
+        "yardstick_cov": 297.9,
+        "findings": 2.0
+      },
+      "no_action": {
+        "yardstick_cov": 335.9,
+        "findings": 2.0
+      },
+      "no_transition": {
+        "yardstick_cov": 333.6,
+        "findings": 2.2
+      },
+      "no_guardrail": {
+        "yardstick_cov": 335.6,
+        "findings": 1.8
+      },
+      "no_fault": {
+        "yardstick_cov": 328.6,
+        "findings": 1.8
+      },
+      "no_novelty": {
+        "yardstick_cov": 337.8,
+        "findings": 2.1
+      }
+    }
+  }
+}
