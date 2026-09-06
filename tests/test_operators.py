@@ -1,6 +1,8 @@
 """Mutation operators: validity, determinism, lineage."""
 import random
+
 import pytest
+
 from boundsec.core.operators import all_operators, crossover, get_operator
 from boundsec.core.types import FuzzCase, Severity, VulnClass
 

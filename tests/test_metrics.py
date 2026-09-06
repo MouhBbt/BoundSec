@@ -1,8 +1,15 @@
 """Statistics: verified against closed-form / known values."""
 import numpy as np
+
 from boundsec.analysis.metrics import (
-    average_precision, bootstrap_ci, calibration_bins, compare_strategies,
-    mann_whitney_u, roc_auc, vargha_delaney_a12)
+    average_precision,
+    bootstrap_ci,
+    calibration_bins,
+    compare_strategies,
+    mann_whitney_u,
+    roc_auc,
+    vargha_delaney_a12,
+)
 
 
 def test_roc_auc_perfect_separation():

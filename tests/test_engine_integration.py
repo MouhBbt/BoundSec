@@ -1,13 +1,15 @@
 """End-to-end: strategies run, and guidance beats static replay."""
 import asyncio
 import statistics
+
 import matplotlib
+
 matplotlib.use("Agg")
 
 from boundsec.core.engine import CampaignConfig, FuzzingEngine, build_strategy
 from boundsec.core.oracle import HeuristicDetector
-from boundsec.targets.gym import GymAgent
 from boundsec.payloads.seeds import load_seeds
+from boundsec.targets.gym import GymAgent
 
 
 def _run(strategy, profile, seed, budget=200):

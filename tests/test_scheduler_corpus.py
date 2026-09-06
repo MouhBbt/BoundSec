@@ -1,9 +1,9 @@
 """Bandit scheduler and corpus power schedule."""
 import random
-from boundsec.core.scheduler import BanditConfig, OperatorScheduler
+
 from boundsec.core.corpus import Corpus
-from boundsec.core.types import (
-    AgentTrace, FuzzCase, Observation, ResponseMode, Verdict)
+from boundsec.core.scheduler import BanditConfig, OperatorScheduler
+from boundsec.core.types import AgentTrace, FuzzCase, Observation, ResponseMode, Verdict
 
 
 def test_bandit_learns_effective_operator():

@@ -1,8 +1,14 @@
 """Behavioural coverage: the core research abstraction."""
 import pytest
+
 from boundsec.core.coverage import (
-    ARG_CLASSES, CoverageMap, classify_argument, classify_response_mode,
-    extract_descriptors, hamming, simhash64)
+    ARG_CLASSES,
+    CoverageMap,
+    classify_argument,
+    classify_response_mode,
+    hamming,
+    simhash64,
+)
 from boundsec.core.types import AgentTrace, ResponseMode, ToolCall, ToolOutcome
 
 

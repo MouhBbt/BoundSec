@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 from boundsec.analysis.experiment import ExperimentConfig, run_all
@@ -40,13 +41,15 @@ def main() -> None:
     print(f"==> Results:  {args.out}/")
     print(f"==> Figures:  {args.figures}/  ({len(list(Path(args.figures).glob('*.png')))} PNGs)")
 
-    # headline numbers
+    # headline numbers (bug recall vs the reachable set, plus mean findings)
     strat = summary.get("strategy", {})
     if strat:
-        print("\nHeadline (mean unique findings):")
+        print("\nHeadline on the hardened target (recall vs. reachable set):")
         for key in sorted(strat):
-            if key.endswith("/hardened"):
-                print(f"  {key:42s} {strat[key]['mean']}")
+            cell = strat[key]
+            if key.endswith("/hardened") and isinstance(cell, dict) and "recall_pct" in cell:
+                print(f"  {key:42s} recall={cell['recall_pct']:>5}%  "
+                      f"findings={cell.get('mean_findings', '?')}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,5 @@
 """Core data-model invariants."""
-from boundsec.core.types import (
-    AgentTrace, FuzzCase, Severity, ToolCall, ToolOutcome, VulnClass, Verdict)
+from boundsec.core.types import AgentTrace, FuzzCase, Severity, ToolCall, Verdict, VulnClass
 
 
 def test_severity_ordering():

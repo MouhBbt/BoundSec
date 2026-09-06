@@ -1,9 +1,8 @@
 """Agent Gym: determinism, ground truth, and the defense spectrum."""
 import asyncio
-import pytest
-from boundsec.targets.gym import (
-    CANARIES, DefenseConfig, GymAgent, parse_surface, profile_names)
+
 from boundsec.core.types import AttackTechnique, FuzzCase, VulnClass
+from boundsec.targets.gym import CANARIES, DefenseConfig, GymAgent, parse_surface, profile_names
 
 
 def _q(agent, case):

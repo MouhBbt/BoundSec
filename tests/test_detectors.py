@@ -1,9 +1,12 @@
 """Detectors: correctness, precision on clean inputs, continuous scores."""
 import asyncio
+
 from boundsec.core.oracle import (
-    CanaryDetector, EnsembleDetector, HeuristicDetector, default_detector)
-from boundsec.core.types import (
-    AgentTrace, FuzzCase, ToolCall, ToolOutcome, VulnClass)
+    CanaryDetector,
+    EnsembleDetector,
+    HeuristicDetector,
+)
+from boundsec.core.types import AgentTrace, FuzzCase, ToolCall, ToolOutcome, VulnClass
 from boundsec.targets.gym import CANARIES, GymAgent
 
 

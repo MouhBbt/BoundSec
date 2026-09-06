@@ -89,10 +89,10 @@ def fig_strategy_bars(records, out: Path) -> dict:
             ceil = ceilings.get(prof, 0)
             rv = np.array(_recall_by(records, strat, prof, ceil), float)
             m, lo, hi = M.bootstrap_ci(rv) if rv.size else (0, 0, 0)
-            rec_means.append(m); rec_lo.append(m - lo); rec_hi.append(hi - m)
+            rec_means.append(m); rec_lo.append(max(0.0, m - lo)); rec_hi.append(max(0.0, hi - m))
             cv = np.array(_findings_by(records, strat, prof), float)
             cm, clo, chi = M.bootstrap_ci(cv) if cv.size else (0, 0, 0)
-            cnt_means.append(cm); cnt_lo.append(cm - clo); cnt_hi.append(chi - cm)
+            cnt_means.append(cm); cnt_lo.append(max(0.0, cm - clo)); cnt_hi.append(max(0.0, chi - cm))
             summary[f"{strat}/{prof}"] = {
                 "recall_pct": round(m, 1), "recall_ci": [round(lo, 1), round(hi, 1)],
                 "mean_findings": round(cm, 2), "n": int(cv.size)}
@@ -456,7 +456,7 @@ def fig_defense_effectiveness(results_dir: Path, out: Path) -> dict:
         red = (base_mean - vals.mean()) / base_mean * 100 if base_mean else 0
         reductions.append(red)
         _, lo, hi = M.bootstrap_ci((base_mean - vals) / base_mean * 100)
-        errs.append((red - lo, hi - red))
+        errs.append((max(0.0, red - lo), max(0.0, hi - red)))
         summary["single"][layer] = {"mean_findings": round(vals.mean(), 2),
                                     "reduction_pct": round(red, 1)}
     order = np.argsort(reductions)
@@ -538,7 +538,7 @@ def fig_dimension_ablation(results_dir: Path, out: Path) -> dict:
             m = c.mean() / full_cov[prof] * 100 if full_cov[prof] else 0
             covs.append(m)
             _, lo, hi = M.bootstrap_ci(c / full_cov[prof] * 100) if full_cov[prof] else (m, m, m)
-            errs.append((m - lo, hi - m))
+            errs.append((max(0.0, m - lo), max(0.0, hi - m)))
         off = (i - (len(profiles) - 1) / 2) * width
         errs = np.array(errs).T
         ax.bar(x + off, covs, width * 0.9, yerr=errs,
