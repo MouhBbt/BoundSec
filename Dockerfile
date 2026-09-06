@@ -1,22 +1,17 @@
 FROM python:3.12-slim
 
-# Security: run as non-root
-RUN addgroup --system agentfuzz && adduser --system --ingroup agentfuzz agentfuzz
-
+RUN addgroup --system boundsec && adduser --system --ingroup boundsec boundsec
 WORKDIR /app
 
-# Install dependencies first (cached layer)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source
-COPY agentfuzz/ ./agentfuzz/
+COPY boundsec/ ./boundsec/
+COPY experiments/ ./experiments/
 COPY tests/ ./tests/
-COPY pyproject.toml .
+COPY pyproject.toml README.md ./
+RUN pip install --no-cache-dir -e . && mkdir -p results figures && chown -R boundsec /app
 
-RUN pip install --no-cache-dir -e .
-
-# Default: run the CLI
-USER agentfuzz
-ENTRYPOINT ["python", "-m", "agentfuzz"]
+USER boundsec
+ENTRYPOINT ["python", "-m", "boundsec.cli"]
 CMD ["--help"]

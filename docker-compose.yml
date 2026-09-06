@@ -1,34 +1,20 @@
+# BoundSec — run the full offline evaluation in a container and persist results.
+#   docker compose run --rm evaluate
 services:
-  # ── Intentionally vulnerable mock target agent ─────────────────────────────
-  mock-target:
+  evaluate:
     build: .
-    entrypoint: ["python", "tests/target_mock.py"]
-    ports:
-      - "8000:8000"
-    healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
+    entrypoint: ["python", "experiments/run_full_suite.py"]
+    command: ["--budget", "600", "--seeds", "15"]
+    volumes:
+      - ./results:/app/results
+      - ./figures:/app/figures
 
-  # ── Fuzzer – runs against the mock target ─────────────────────────────────
-  fuzzer:
+  # Fuzz a live model (needs an API key in the environment or .env)
+  fuzz-live:
     build: .
-    depends_on:
-      mock-target:
-        condition: service_healthy
+    entrypoint: ["python", "-m", "boundsec.cli", "fuzz"]
+    command: ["--target", "live:gpt-4o-mini", "--budget", "60"]
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-    volumes:
-      - ./reports:/app/reports   # persist JSON reports to host
-    command:
-      - fuzz
-      - --target
-      - http://mock-target:8000/chat
-      - --concurrency
-      - "10"
-      - --verbose
-      - --output
-      - /app/reports/docker_run.json
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - AGENTFUZZ_LLM_MODEL=${AGENTFUZZ_LLM_MODEL:-gpt-4o-mini}

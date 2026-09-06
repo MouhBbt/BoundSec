@@ -1,16 +1,25 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.env
-reports/
+*.py[cod]
 *.egg-info/
-dist/
-build/
 .pytest_cache/
-.mypy_cache/
 .ruff_cache/
-.DS_Store
+build/
+dist/
+
+# Env
+.venv/
+.env
+
+# Logs / scratch
 *.log
-/tmp/agentfuzz_mock.pid
+/scratch/
+
+# Bulky raw per-query results (regenerate with `make experiment`).
+# The rendered figures/, small aggregates, and results/summary.json ARE tracked.
+results/exp1_strategy/
+results/exp2_detectors/
+
+# Generated HTML report (regenerate with: python -m agentfuzz.analysis.report;
+# the shareable version is the published Artifact).
+docs/boundsec_report.html

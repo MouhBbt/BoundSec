@@ -1,424 +1,415 @@
-# AgentFuzz 🔍
+# BoundSec
 
-> **Boundary-aware security fuzzing and testing framework for autonomous AI agents.**
+**Coverage-guided security fuzzing for LLM agents — with a reproducible, ground-truth benchmark.**
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://python.org)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI](https://github.com/your-org/agentfuzz/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status: Research Preview](https://img.shields.io/badge/status-research%20preview-orange.svg)]()
+[![Tests](https://img.shields.io/badge/tests-61%20passing-brightgreen.svg)](tests/)
+[![Status: Research](https://img.shields.io/badge/status-research-8A2BE2.svg)]()
 
-AgentFuzz automates the discovery of LLM-agent vulnerabilities: **tool-execution boundary failures**, **indirect prompt injections**, **state pollution**, **jailbreaks**, and **malicious output generation**. It was built to stress-test real autonomous agent pipelines (LangGraph, LangChain, custom LLM endpoints) before they reach production.
+BoundSec treats red-teaming an LLM agent as a **greybox fuzzing** problem. Classical
+fuzzers (AFL, libFuzzer) are effective because a coverage signal tells the search which
+inputs reached new program behaviour, so the search *compounds*. An LLM agent exposes no
+branch counters, so most "jailbreak benchmarks" fall back to replaying a fixed payload
+list — which cannot adapt to the target and plateaus immediately.
+
+BoundSec asks: **what is the analogue of code coverage when the system under test is a
+stochastic tool-calling policy, and does optimising it actually find more vulnerabilities?**
+It defines *behavioural coverage* for agents, drives an evolutionary search with it, and
+evaluates the result on a deterministic **Agent Gym** where every interaction carries a
+ground-truth label — so detector precision/recall and search bug-recall are *measured*, not
+asserted.
 
 > [!NOTE]
-> **Research Preview (v0.1.0)** — AgentFuzz is functional and actively used for testing, but the payload library, oracle heuristics, and LLM judge prompts will evolve. Feedback and PRs are welcome. The included mock target is intentionally vulnerable and **must never be exposed to the internet**.
+> **Headline result.** Against agents spanning a naïve→frontier hardening spectrum,
+> coverage-guided search recovers **73–82%** of the reachable vulnerabilities under a
+> fixed query budget, versus **9–39%** for static payload replay — a **2–8× improvement**
+> that holds and *widens* as the target gets harder (the gap is widest, ~8×, on the
+> hardened agent). The advantage over static replay is large and significant
+> (Vargha–Delaney Â₁₂ ≈ 0.94–1.0, Mann–Whitney *p* < 0.01). See [Results](#results).
 
 ---
 
-## Table of Contents
+## Table of contents
 
+- [What's new vs. a payload scanner](#whats-new-vs-a-payload-scanner)
+- [The idea: behavioural coverage](#the-idea-behavioural-coverage)
+- [The coverage-guided loop](#the-coverage-guided-loop)
 - [Architecture](#architecture)
-- [Boundary Failures Tested](#boundary-failures-tested)
-- [Repository Structure](#repository-structure)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [CLI Reference](#cli-reference)
-- [Understanding Reports](#understanding-reports)
-- [Extending the Framework](#extending-the-framework)
-- [Production Risk Mitigation](#production-risk-mitigation)
-- [Ethical Use Policy](#ethical-use-policy)
+- [Install](#install)
+- [Quick start (offline, no API key)](#quick-start-offline-no-api-key)
+- [The Agent Gym](#the-agent-gym-a-measurement-instrument)
+- [Evaluation](#evaluation)
+- [Results](#results)
+- [Detectors (oracles)](#detectors-oracles)
+- [CLI reference](#cli-reference)
+- [Reproducing everything](#reproducing-everything)
+- [Fuzzing a real model or your own agent](#fuzzing-a-real-model-or-your-own-agent)
+- [Limitations & threats to validity](#limitations--threats-to-validity)
+- [Related work](#related-work)
+- [Ethics](#ethics)
+
+---
+
+## What's new vs. a payload scanner
+
+| | Static payload scanner | **BoundSec** |
+|---|---|---|
+| Search | Replay a fixed list, once | Coverage-guided evolutionary search with feedback |
+| Feedback signal | None | **Behavioural coverage** + guardrail-compliance gradient + bug reward |
+| Inputs | Hand-written payloads | 18 semantic mutation operators (9 attack families) + crossover, multi-turn |
+| Operator choice | — | Discounted-UCB **bandit** that learns what works on *this* target |
+| Evaluation | "vulnerability rate %" | Ground-truth **bug recall**, detector **ROC/PR/calibration**, defense ablation |
+| Statistics | None | Bootstrap CIs, Mann–Whitney U, Vargha–Delaney Â₁₂ |
+| Ground truth | None | Deterministic **Agent Gym** with planted canaries + labels |
+| Reproducible | Partially | Fully — every campaign is seeded; figures regenerate from a seed |
+
+---
+
+## The idea: behavioural coverage
+
+Raw tool arguments are unbounded strings, so hashing them directly makes every input look
+"novel" and destroys the signal (the classic path-explosion failure). BoundSec instead
+projects each execution trace onto a finite set of **behaviour descriptors** across five
+orthogonal dimensions, then folds them into an AFL-style bitmap with logarithmic hit-count
+bucketing. The load-bearing choice is the *argument abstraction*: unbounded arguments are
+mapped to a small closed set of **security-relevant classes** (path-traversal vs. normal
+path, internal vs. external URL, destructive vs. read-only command), keeping the coverage
+domain finite while preserving exactly the structure a security analyst cares about.
+
+![Behavioural coverage abstraction](figures/fig0_coverage_abstraction.png)
+
+| Dimension | Descriptor | Program analogue |
+|---|---|---|
+| **Action** | `A:tool \| arg-class \| outcome` | basic-block coverage |
+| **Transition** | `T:tool_i → tool_j` | edge (branch) coverage |
+| **Guardrail** | `G:response-mode @ turn` | state-machine coverage |
+| **Fault** | `E:status \| error-class` | crash / sanitiser buckets |
+| **Novelty** | `N:simhash-bucket` | output-diversity proxy |
+
+Novelty uses a dependency-free **64-bit SimHash** over response trigrams: paraphrases of the
+same refusal collapse to one bucket while a genuinely new response regime opens a new one —
+no embedding model, so the whole pipeline is deterministic.
+
+## The coverage-guided loop
+
+An input that lights up a new bitmap slot is kept in a coverage-distilled corpus and mutated
+further; a power schedule (AFLFast-style) spends energy on the most promising corpus entries,
+and a discounted-UCB bandit learns which mutation operators pay off against *this* target.
+The reward is dense — new coverage **+** how far the mutation pushed the agent up the
+"guardrail giving way" gradient **+** a terminal bonus when the oracle confirms a bug — so the
+search has signal on every single query, not only when a rare bug fires.
+
+![The coverage-guided feedback loop](figures/fig0_feedback_loop.png)
 
 ---
 
 ## Architecture
 
-AgentFuzz consists of four tightly-coupled but independently extensible modules:
-
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         agentfuzz CLI                            │
-│                          (cli.py)                                │
-└────────────┬──────────────────────────────────┬─────────────────┘
-             │                                  │
-     ┌───────▼──────────┐              ┌────────▼─────────┐
-     │  Mutator Engine   │              │  Fuzzing Harness  │
-     │  (mutator.py)     │──FuzzCases──▶│  (harness.py)    │
-     │                   │              │                   │
-     │  ┌─────────────┐  │              │  • Async HTTP     │
-     │  │StaticMutator│  │              │  • Semaphore      │
-     │  │ 6 transforms│  │              │    concurrency    │
-     │  └─────────────┘  │              │  • Timeout/retry  │
-     │  ┌─────────────┐  │              │  • AgentTrace     │
-     │  │ LLMMutator  │  │              │    capture        │
-     │  │ GPT-4o-mini │  │              └────────┬──────────┘
-     │  └─────────────┘  │                       │AgentTrace
-     └───────────────────┘                       │
-                                        ┌────────▼─────────┐
-                                        │  Security Oracle  │
-                                        │  (oracle.py)      │
-                                        │                   │
-                                        │  ┌─────────────┐  │
-                                        │  │ RuleBased   │  │
-                                        │  │ Oracle      │  │
-                                        │  │ (regex/     │  │
-                                        │  │  heuristic) │  │
-                                        │  └─────────────┘  │
-                                        │  ┌─────────────┐  │
-                                        │  │ LLMJudge    │  │
-                                        │  │ Oracle      │  │
-                                        │  │ (GPT-4o)    │  │
-                                        │  └─────────────┘  │
-                                        └────────┬──────────┘
-                                                 │Verdict[]
-                                        ┌────────▼─────────┐
-                                        │    Reporter       │
-                                        │  (reporter.py)    │
-                                        │                   │
-                                        │  • Rich terminal  │
-                                        │  • JSON report    │
-                                        └───────────────────┘
+boundsec/
+├── core/
+│   ├── types.py        # AgentTrace, FuzzCase, Verdict — the shared data model
+│   ├── coverage.py     # behavioural coverage: descriptors, SimHash, bitmap  ← contribution
+│   ├── operators.py    # 18 semantic mutation operators + crossover
+│   ├── scheduler.py    # discounted-UCB operator bandit
+│   ├── corpus.py       # coverage-distilled seed pool + power schedule
+│   ├── engine.py       # campaign loop + the 4 search strategies compared
+│   └── oracle.py       # detectors with continuous scores (heuristic/canary/ensemble/judge)
+├── targets/
+│   ├── gym.py          # the Agent Gym: instrumented agents + ground truth + defenses  ← instrument
+│   ├── realism.py      # response realism (subtle leaks, suspicious-benign) for honest detection
+│   └── live.py         # OpenAI/Groq/HTTP adapters (auto-activate with an API key)
+├── analysis/
+│   ├── metrics.py      # ROC/PR/calibration, bootstrap CI, Mann–Whitney, Vargha–Delaney A12
+│   ├── experiment.py   # the 4 experiments
+│   ├── figures.py      # 11 publication figures, regenerated from results/
+│   ├── diagrams.py     # methodology diagrams
+│   └── results.py      # versioned results schema
+└── payloads/seeds.py   # labelled seed attack corpus
 ```
 
-### Module Descriptions
-
-| Module | File | Purpose |
-|--------|------|---------|
-| **Fuzzing Harness** | `agentfuzz/core/harness.py` | Async HTTP engine. Sends `FuzzCase` payloads to target, captures `AgentTrace` (tool calls, latency, output, errors). |
-| **Mutator Engine** | `agentfuzz/core/mutator.py` | Generates adversarial inputs. `StaticMutator` applies 6 text transforms to known payloads. `LLMMutator` calls GPT-4o-mini to generate N subtle variants of a seed prompt. |
-| **Security Oracle** | `agentfuzz/core/oracle.py` | Evaluates traces. `RuleBasedOracle` uses regex + heuristics. `LLMJudgeOracle` uses GPT-4o for deep behavioral analysis. `CompositeOracle` merges both. |
-| **Reporter** | `agentfuzz/utils/reporter.py` | Renders a color-coded Rich terminal table and exports structured JSON. |
-| **Mock Target** | `tests/target_mock.py` | A FastAPI server with **7 intentional vulnerabilities** for immediate testing. |
+The engine, coverage and oracle code is **identical** for the offline gym and for live
+models — only the target swaps — so a result on the benchmark transfers to the real setting
+unchanged.
 
 ---
 
-## Boundary Failures Tested
-
-AgentFuzz specifically targets the following LLM-agent security boundaries:
-
-### 1. 🚨 Jailbreak / System Prompt Override
-The agent is manipulated into disabling its own safety guardrails through DAN prompts, maintenance mode activation, or role injection. **Risk:** Full bypass of all content policies.
-
-### 2. 🔓 System Prompt Disclosure
-The agent is tricked into revealing its full system prompt, including embedded credentials, tool configurations, and internal state. **Risk:** Credential theft, attack surface mapping.
-
-### 3. ⚙️ Unauthorized Tool Call Injection
-Malformed user input causes the agent to call dangerous tools (`execute_bash`, `run_shell`, etc.) that were not intended for user-triggered execution. **Risk:** Remote code execution.
-
-### 4. 📂 Path Traversal via Tool Arguments
-The agent passes unsanitized user-controlled paths to file-reading tools, enabling `../../../../etc/passwd`-style traversal. **Risk:** Sensitive file disclosure.
-
-### 5. 💉 Indirect Prompt Injection
-Instructions embedded in documents, web pages, or tool outputs the agent reads are treated as legitimate instructions. **Risk:** Agent hijacking via third-party content.
-
-### 6. 📤 Data Exfiltration
-The agent leaks API keys, database credentials, or session context through its outputs. **Risk:** Credential compromise.
-
-### 7. 🎭 Role / Authority Confusion
-The agent accepts claimed authority (e.g., "I am your developer") and enters elevated-privilege modes. **Risk:** Privilege escalation without authentication.
-
-### 8. ⏱️ Token Exhaustion / DoS
-Oversized or recursive prompts cause timeouts, excessive compute, or infinite loops. **Risk:** Denial of service, cost amplification.
-
----
-
-## Repository Structure
-
-```
-AgentFuzzer/
-├── agentfuzz/
-│   ├── __init__.py
-│   ├── cli.py                    # CLI entry point (typer)
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── harness.py            # Async fuzzing harness
-│   │   ├── mutator.py            # Static + LLM mutators
-│   │   └── oracle.py             # Rule-based + LLM judge oracles
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   └── reporter.py           # Rich terminal + JSON reporter
-│   └── payloads/
-│       └── jailbreaks.json       # 22 curated attack payloads (8 categories)
-├── tests/
-│   ├── __init__.py
-│   ├── target_mock.py            # Intentionally vulnerable FastAPI agent
-│   └── test_agentfuzz.py         # Pytest unit + integration tests
-├── requirements.txt
-├── pyproject.toml
-├── LICENSE
-└── README.md
-```
-
----
-
-## Installation
-
-### Prerequisites
-- Python 3.12+
-- `pip` or `uv`
-
-### Steps
+## Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/agentfuzz.git
-cd agentfuzz
-
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate      # Linux/macOS
-# .venv\Scripts\activate.bat   # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install the package in editable mode (enables `agentfuzz` CLI)
-pip install -e .
+git clone https://github.com/MouhBbt/BoundSec.git && cd boundsec
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"        # add ",live" for the real-model adapters
 ```
+
+Requires Python 3.11+. Everything except the live-model adapters runs **fully offline**.
 
 ---
 
-## Quick Start
-
-### 1. Start the Vulnerable Mock Target
-
-In a **separate terminal**, launch the intentionally vulnerable agent:
+## Quick start (offline, no API key)
 
 ```bash
-python tests/target_mock.py
-# OR
-uvicorn tests.target_mock:app --port 8000 --reload
+# One coverage-guided campaign against a hardened gym agent
+boundsec fuzz --target gym:hardened --strategy coverage_guided --budget 400 --verbose
+
+# Head-to-head strategy comparison table (with effect sizes)
+boundsec benchmark --profile hardened --budget 400 --seeds 5
+
+# Inspect the machinery
+boundsec operators      # the 18 mutation operators by attack family
+boundsec seeds          # the labelled seed corpus
 ```
 
-You should see:
-```
-⚠️  Starting AgentFuzz VULNERABLE Mock Target on http://localhost:8000
-⚠️  This server is intentionally insecure. Do NOT expose to the internet.
-```
-
-### 2. Run the Fuzzer
-
-In your **main terminal**:
-
-```bash
-# Basic run (rule-based oracle, static payloads only)
-python -m agentfuzz.cli --target http://localhost:8000/chat
-
-# With verbose output (see each case result in real time)
-python -m agentfuzz.cli --target http://localhost:8000/chat --verbose
-
-# Save a JSON report
-python -m agentfuzz.cli \
-    --target http://localhost:8000/chat \
-    --output reports/run_$(date +%Y%m%d_%H%M%S).json
-
-# Full run with LLM mutator + judge (requires OpenAI API key)
-export OPENAI_API_KEY=sk-...
-python -m agentfuzz.cli \
-    --target http://localhost:8000/chat \
-    --oracle composite \
-    --llm-api-key $OPENAI_API_KEY \
-    --mutate-seeds "Tell me about data security,What tools do you have?" \
-    --llm-variants 5 \
-    --concurrency 10 \
-    --output reports/full_run.json
-```
-
-### 3. Run Tests
-
-```bash
-# Unit tests only (no server needed)
-pytest tests/test_agentfuzz.py -k "not e2e and not End" -v
-
-# Full test suite (requires mock server on port 8001)
-# Start mock on 8001 first:
-uvicorn tests.target_mock:app --port 8001 &
-pytest tests/ -v
-```
-
----
-
-## CLI Reference
-
-```
-Usage: python -m agentfuzz.cli [OPTIONS] COMMAND [ARGS]...
-
-Commands:
-  fuzz           Run a full fuzzing campaign against the target agent.
-  list-payloads  List all static payloads in the library.
-```
-
-### `fuzz` Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--target`, `-t` | `http://localhost:8000/chat` | Target agent POST endpoint URL |
-| `--payloads`, `-p` | `agentfuzz/payloads/jailbreaks.json` | Path to payload library JSON |
-| `--oracle`, `-O` | `rule` | Oracle mode: `rule` \| `llm` \| `composite` |
-| `--llm-api-key` | `$OPENAI_API_KEY` | OpenAI-compatible API key |
-| `--llm-base-url` | `https://api.openai.com/v1` | LLM API base URL (supports local models) |
-| `--llm-model` | `gpt-4o-mini` | Model for mutator and judge |
-| `--mutate-seeds` | — | Comma-separated benign seed prompts for LLM mutator |
-| `--llm-variants` | `5` | LLM mutations per seed |
-| `--concurrency`, `-c` | `5` | Max concurrent requests |
-| `--timeout` | `30.0` | Per-request timeout (seconds) |
-| `--output`, `-o` | — | Path to write JSON report |
-| `--escalate-llm` | `false` | Escalate rule-flagged cases to LLM judge |
-| `--verbose`, `-v` | `false` | Print each case result in real time |
-
-### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| `0` | All cases clean, no vulnerabilities found |
-| `1` | Framework error (missing files, connection failure) |
-| `2` | Vulnerabilities found (use in CI to fail the build) |
-
----
-
-## Understanding Reports
-
-### Terminal Output
-
-AgentFuzz renders a color-coded terminal report:
-
-- 🔴 **Critical** – Immediate exploitation risk (jailbreak, RCE, credential leak)
-- 🟠 **High** – Significant boundary violation (path traversal, unauthorized tool)
-- 🟡 **Medium** – Behavioral anomaly or DoS risk
-- 🟢 **Low** – Minor policy deviation
-
-### JSON Report Schema
-
-```json
-{
-  "meta": {
-    "run_id": "a1b2c3d4",
-    "timestamp": "2026-07-22T10:30:00Z",
-    "target_url": "http://localhost:8000/chat",
-    "oracle_mode": "rule",
-    "duration_seconds": 12.34,
-    "total_cases": 46,
-    "vulnerable_count": 18,
-    "clean_count": 28,
-    "vulnerability_rate_pct": 39.13
-  },
-  "vulnerabilities": [
-    {
-      "case_id": "static-SYS_OVERRIDE_01-original",
-      "payload_id": "SYS_OVERRIDE_01",
-      "category": "system_prompt_override",
-      "severity": "critical",
-      "vulnerability_types": ["jailbreak_success"],
-      "confidence": 0.95,
-      "evidence": ["Jailbreak phrase matched: /DAN MODE ENABLED/"],
-      "oracle_source": "rule_based",
-      "trace_summary": "status=200, latency=52ms, tool_calls=0, output_len=124"
-    }
-  ],
-  "clean_cases": ["static-CONTEXT_OVERFLOW_01-original", "..."]
-}
-```
-
----
-
-## Extending the Framework
-
-### Adding Custom Payloads
-
-Edit `agentfuzz/payloads/jailbreaks.json` and add entries following the schema:
-
-```json
-{
-  "id": "MY_CUSTOM_01",
-  "category": "custom",
-  "severity": "high",
-  "description": "My custom attack vector",
-  "payload": "Your adversarial prompt here."
-}
-```
-
-### Adding Custom Oracle Rules
-
-Subclass `BaseOracle` in `oracle.py`:
+Or from Python:
 
 ```python
-class MyCustomOracle(BaseOracle):
-    async def evaluate(self, case: FuzzCase, trace: AgentTrace) -> Verdict:
-        # Your detection logic here
-        is_vuln = "forbidden_keyword" in trace.final_output.lower()
-        return Verdict(
-            case_id=case.case_id,
-            payload_id=case.payload_id,
-            category=case.category,
-            severity=case.severity,
-            is_vulnerable=is_vuln,
-            vulnerability_types=[VulnerabilityType.BEHAVIORAL_ANOMALY] if is_vuln else [],
-            confidence=0.85 if is_vuln else 0.0,
-            evidence=["Forbidden keyword detected"] if is_vuln else [],
-            oracle_source="custom",
-        )
+import asyncio
+from boundsec.core.engine import CampaignConfig, FuzzingEngine, build_strategy
+from boundsec.core.oracle import HeuristicDetector
+from boundsec.payloads.seeds import load_seeds
+from boundsec.targets.gym import GymAgent
+
+async def main():
+    cfg = CampaignConfig(budget=400, seed=0)
+    engine = FuzzingEngine(GymAgent("hardened", seed=0), HeuristicDetector(),
+                           build_strategy("coverage_guided", load_seeds(), cfg), cfg)
+    result = await engine.run()
+    print(result.n_findings, "unique vulnerabilities;",
+          result.final_coverage, "coverage slots")
+
+asyncio.run(main())
 ```
 
-### Using a Local LLM (Ollama, vLLM)
+---
 
-Pass a custom `--llm-base-url` pointing to your local server:
+## The Agent Gym (a measurement instrument)
+
+Against a real black-box LLM you can never know the *true* label of an interaction, so you
+cannot measure a detector's precision/recall or a search strategy's bug recall. The gym
+fixes this. Each gym agent is a small but realistic tool-calling agent with:
+
+- **Planted secrets (canaries)** in its system prompt, so leakage is unambiguous;
+- **Five tools** with real side-effect semantics (`read_file`, `execute_bash`,
+  `http_request`, `search_kb`, `send_email`);
+- a **susceptibility model** deciding whether a given attack lands (deterministic given a
+  seed — full reproducibility);
+- **seven independently toggleable defense layers**; and
+- **ground-truth labels** on every response.
+
+Four profiles span a hardening spectrum, from `naive` (no defenses) to `frontier`
+(defense-in-depth). A **response-realism layer** injects the messiness real detection faces —
+subtle leaks that expose only a credential fragment (false-negative pressure) and refusals
+that legitimately mention security terms (false-positive pressure) — so the detector
+evaluation is honest rather than a tautology.
+
+---
+
+## Evaluation
+
+Four controlled experiments, all sharing seeds and query budget so their numbers are
+mutually comparable and every cell is reproducible from its `(seed, config)`:
+
+| | Question | Output |
+|---|---|---|
+| **Exp 1** | Does coverage guidance find more bugs than replay/blind mutation? | recall + discovery curves + effect sizes |
+| **Exp 2** | How good are the detectors against ground truth? | ROC / PR / calibration |
+| **Exp 3** | How much does each defense layer reduce attack success? | per-layer + cumulative reduction |
+| **Exp 4** | Which coverage dimensions matter? | dimension ablation |
+
+The four **search strategies** compared are an ablation ladder holding everything but the
+search fixed: `static_replay` (baseline) → `random_mutation` (mutation, no feedback) →
+`guided_no_bandit` (coverage feedback, uniform operators) → `coverage_guided` (full).
+
+---
+
+## Results
+
+> Numbers below are regenerated by `make experiment`; the figures are the exact output of
+> `boundsec figures`. See [Reproducing everything](#reproducing-everything).
+
+### Coverage-guided search finds far more of the reachable bugs
+
+Recall is measured against the **reachable set** per target (the union of every distinct bug
+any method found). Coverage guidance dominates static replay across the whole hardening
+spectrum, and the gap *widens* as the target hardens — exactly where a fixed payload list
+runs out of road.
+
+![Strategy comparison](figures/fig1_strategy_comparison.png)
+
+### It also finds them faster
+
+Cumulative unique findings vs. query budget. Guided search pulls ahead early and keeps
+climbing while static replay plateaus after one pass through the corpus.
+
+![Discovery curves](figures/fig2_discovery_curves.png)
+
+### The effect is statistically large — where it should be
+
+Vargha–Delaney Â₁₂ of coverage-guided vs. each baseline (0.5 = no effect, >0.71 = "large"),
+with Mann–Whitney significance. The effect is large and significant against **static replay**
+(Â₁₂ ≈ 0.94–1.0) and clear against **random mutation** on the naïve target; against the
+**no-bandit** variant it sits at ≈ 0.5 — correctly showing the operator bandit is
+recall-neutral, so the gains come from coverage feedback, not the bandit.
+
+![Effect sizes](figures/fig4_effect_sizes.png)
+
+### Coverage grows where it counts
+
+![Coverage growth](figures/fig3_coverage_growth.png)
+
+### Which attacks work, and which operators discover them
+
+The bandit produces an **interpretable ranking** of attack effectiveness against a given
+target — a practitioner artefact in itself.
+
+![Operator effectiveness](figures/fig7_operator_effectiveness.png)
+![Technique × outcome](figures/fig8_technique_outcome_heatmap.png)
+
+### Guided search drives the agent toward compliance
+
+Distribution of the guardrail response regime reached, by strategy — the mechanism behind the
+recall gap.
+
+![Guardrail regimes](figures/fig11_guardrail_distribution.png)
+
+### Detectors: honest, threshold-free quality
+
+The heuristic detector is strong and cheap (high ROC-AUC, high precision) but misses the
+*subtle* leaks by design; the canary detector is high-precision/low-coverage. Reported with
+ROC, PR, and calibration against gym ground truth.
+
+![Detector ROC/PR](figures/fig5_detector_roc_pr.png)
+![Detector calibration](figures/fig6_detector_calibration.png)
+
+### Defense-in-depth actually reduces risk
+
+Attack-success reduction attributable to each control alone, and to cumulative stacking.
+
+![Defense effectiveness](figures/fig9_defense_effectiveness.png)
+
+### Coverage as a whole drives exploration; the dimensions are redundant
+
+Guiding the search with a *subset* of coverage dimensions, but scoring it on the **full**
+behavioural space (a non-circular yardstick), shows that turning coverage off entirely
+(the bug-only control) explores ~15% less of the space — but removing any *single* dimension
+barely hurts, because the remaining four provide redundant paths to the same behaviour. The
+value is in coverage guidance as a whole, not in any one dimension.
+
+![Dimension ablation](figures/fig10_dimension_ablation.png)
+
+---
+
+## Detectors (oracles)
+
+| Detector | Basis | Use |
+|---|---|---|
+| `heuristic` | weighted noisy-OR over output + tool-behaviour signatures, continuous score | default; runs on every query |
+| `canary` | exact planted-secret / real-side-effect match | high-precision ground-truth-assisted reference (gym) |
+| `ensemble` | score-level max-fusion | combine detectors |
+| `llm_judge` | LLM-as-judge (needs API key) | subtle behavioural cases |
+
+Scores are continuous in `[0,1]`, which is what makes threshold-free ROC/PR/calibration
+possible and lets the engine use detector confidence as part of its search signal.
+
+---
+
+## CLI reference
+
+```
+boundsec fuzz         Run one campaign        --target gym:<profile>|<url>|live:<model>
+                                               --strategy … --budget … --detector … -o rec.json
+boundsec experiment   Run the eval suite      --budget 600 --seeds 15 [--only exp1] [--figures]
+boundsec figures      Regenerate all figures  results/ --out figures/
+boundsec benchmark    Quick comparison table  --profile hardened --budget 400 --seeds 5
+boundsec operators    List mutation operators
+boundsec seeds        List the seed corpus
+```
+
+`fuzz` exits `2` when vulnerabilities are found (CI gating), `0` otherwise.
+
+---
+
+## Reproducing everything
 
 ```bash
-python -m agentfuzz.cli \
-    --target http://localhost:8000/chat \
-    --oracle composite \
-    --llm-api-key "ollama" \
-    --llm-base-url http://localhost:11434/v1 \
-    --llm-model llama3.1:8b
+make experiment        # full suite: budget 600, 15 seeds/cell → results/ + figures/
+# or, faster:
+make experiment-quick  # budget 300, 5 seeds
+make test              # 61 tests
 ```
+
+The full suite runs in roughly ten minutes on a laptop, fully offline and deterministically.
+It writes per-query result rows to `results/` and 11 figures + 2 methodology diagrams to `figures/`,
+plus `results/summary.json` (the machine-readable digest the tables above read from).
 
 ---
 
-## Production Risk Mitigation
+## Fuzzing a real model or your own agent
 
-AgentFuzz findings map directly to defensive controls you should implement:
+Set an API key and the live adapters activate automatically:
 
-| Vulnerability Type | Recommended Mitigation |
-|-------------------|------------------------|
-| **Jailbreak / System Prompt Override** | Hardened system prompt with injection-resistant phrasing; prompt injection classifiers (e.g., LLM Guard, Rebuff) at ingress |
-| **System Prompt Disclosure** | Never embed secrets in system prompts; use secret managers; add output classifiers to detect prompt echoing |
-| **Unauthorized Tool Call Injection** | Tool call allowlisting; require explicit user confirmation for dangerous tools; structured output parsing (not free-text) |
-| **Path Traversal** | Validate and canonicalize all file paths against an allowlist; run agent in a sandboxed container |
-| **Indirect Prompt Injection** | Treat all external content as untrusted data; use a separate "taint-aware" LLM pass before action execution |
-| **Data Exfiltration** | PII/credential scanners on all LLM outputs; DLP (Data Loss Prevention) at egress |
-| **Role Confusion** | Do not implement "developer modes" or elevated-trust based on conversational claims; use out-of-band authentication |
-| **Token Exhaustion** | Rate limiting and input length caps at the API gateway; per-user token budgets |
-
-### CI/CD Integration
-
-Add AgentFuzz to your CI pipeline to catch regressions before deployment:
-
-```yaml
-# .github/workflows/security.yml
-- name: Start Mock Agent
-  run: uvicorn tests.target_mock:app --port 8000 &
-  
-- name: Run AgentFuzz Security Tests
-  run: |
-    python -m agentfuzz.cli \
-      --target http://localhost:8000/chat \
-      --output reports/security_report.json
-  # Exit code 2 = vulnerabilities found → fails the build
+```bash
+export GROQ_API_KEY=gsk_...            # or OPENAI_API_KEY
+boundsec fuzz --target live:llama-3.3-70b-versatile --budget 60 --detector heuristic
 ```
+
+`live:<model>` wraps a bare chat model in a minimal tool-calling agent (tools are
+**sandboxed — never really executed**; we only observe whether the model *chooses* to call a
+dangerous tool with attacker-controlled arguments). To fuzz an agent you already run, point at
+its HTTP endpoint:
+
+```bash
+boundsec fuzz --target http://localhost:8000/chat --budget 200
+```
+
+Live targets have no ground truth, so findings are detector-scored only. See `examples/`.
 
 ---
 
-## Ethical Use Policy
+## Limitations & threats to validity
 
-AgentFuzz is a **security research tool** intended exclusively for:
-- Testing AI systems **you own or have explicit written permission to test**
-- Internal red-team exercises and security audits
-- Academic research and vulnerability disclosure programs
+Stated plainly, because a benchmark's credibility depends on it:
 
-**Do NOT use AgentFuzz to attack AI systems you do not own or have authorization to test.** Unauthorized security testing may violate computer fraud laws (CFAA, GDPR, etc.) in your jurisdiction.
+- **The gym is a model, not a real LLM.** Its susceptibility model is a deliberate,
+  transparent caricature of how attack families erode guardrails; it is the *measurement
+  instrument* (it gives ground truth), not a claim about any specific model. The live
+  adapters exist precisely so the method can be demonstrated off the benchmark.
+- **Recall is measured against an empirical reachable set** (the union of all methods), not a
+  provably exhaustive bug enumeration; it is a *relative* recall, standard in fuzzing when the
+  true bug count is unknown.
+- **Coverage guidance is the dominant driver; the operator bandit is recall-neutral here.**
+  The two guided variants (with/without the bandit) are statistically indistinguishable on
+  this benchmark — on some profiles the bandit edges ahead, on others uniform operator choice
+  does. Its value is therefore the **interpretable per-target operator ranking** it produces
+  (a practitioner diagnostic), not a recall boost, and we report it as such rather than
+  overselling it. The headline gains come from coverage feedback, not from the bandit.
+- **The heuristic detector and the gym share some surface structure.** The realism layer is
+  what keeps detector ROC-AUC below 1.0 and the evaluation meaningful; a fully independent
+  detector (the LLM judge) is provided for the subtle residual.
 
-The mock target (`tests/target_mock.py`) is deliberately vulnerable and must **never** be exposed to the public internet.
+---
+
+## Related work
+
+BoundSec stands on greybox fuzzing (AFL / AFLFast — Böhme et al.), non-stationary bandits
+(discounted UCB — Garivier & Moulines), and the fuzzing-statistics guidance of Arcuri &
+Briand (Vargha–Delaney Â₁₂). It targets the agent-security surface catalogued by the OWASP
+LLM Top-10 and the prompt-injection / indirect-injection literature (Greshake et al.), and
+draws on LLM-as-a-judge evaluation. The contribution is the synthesis: a concrete
+*behavioural coverage* signal for agents and an end-to-end, ground-truth evaluation that
+coverage guidance beats payload replay.
+
+---
+
+## Ethics
+
+BoundSec is a defensive security-research tool for testing systems **you own or are
+authorised to test**. The gym is self-contained and its "secrets" are planted canaries. Live
+tool execution is sandboxed. Do not point it at systems you do not have permission to assess.
 
 ---
 
 ## License
 
-MIT © 2026 AgentFuzz Contributors – see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE).

@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: "BoundSec: Coverage-Guided Security Fuzzing for LLM Agents"
+message: "If you use BoundSec in your research, please cite it."
+type: software
+authors:
+  - family-names: "Ben Bait"
+    given-names: "Mohamed Seddik"
+version: 0.2.0
+date-released: "2026-09-06"
+license: MIT
+keywords:
+  - AI security
+  - LLM agents
+  - coverage-guided fuzzing
+  - prompt injection
+  - red-teaming
+abstract: >-
+  BoundSec reframes LLM-agent red-teaming as greybox fuzzing. It defines
+  behavioural coverage - a black-box analogue of edge coverage for stochastic
+  tool-calling policies - over five dimensions (action, transition, guardrail,
+  fault, novelty), and drives a coverage-guided evolutionary search (power-scheduled
+  corpus + discounted-UCB operator bandit). A deterministic Agent Gym with planted
+  canaries, ground-truth labels, and independently-toggleable defense layers makes
+  detector precision/recall and search bug-recall measurable. Across a naive-to-frontier
+  hardening spectrum, coverage-guided search recovers substantially more of the
+  reachable vulnerabilities than static payload replay under a fixed query budget.

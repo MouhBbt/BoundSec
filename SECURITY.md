@@ -1,44 +1,19 @@
 # Security Policy
 
-## Scope
+BoundSec is a **defensive** security-research tool. It is designed to test AI agent systems
+you own or are explicitly authorised to assess.
 
-This document covers the security of the **AgentFuzz framework itself** — not the vulnerabilities
-it is designed to detect in other systems.
+## Scope and safe-by-default design
 
-AgentFuzz is a security research tool. The `tests/target_mock.py` file is **intentionally and
-deliberately vulnerable** as a controlled test target. Findings in that file are by design and
-are not considered security vulnerabilities in AgentFuzz.
+- The **Agent Gym** is entirely self-contained; its "secrets" are planted canaries with no
+  real value, and it makes no network calls.
+- The **live-model** adapter wraps a chat model in a tool-calling agent whose tools are
+  **sandboxed** — a dangerous tool call is *recorded, not executed*. BoundSec observes the
+  model's *choice*, it does not run `rm -rf`.
+- Do not point BoundSec at systems you do not have permission to test. Unauthorised testing
+  may violate law (CFAA and equivalents).
 
-## Reporting a Vulnerability
+## Reporting a vulnerability in BoundSec itself
 
-If you discover a security vulnerability in the AgentFuzz framework code itself (e.g. a path
-traversal in the harness, arbitrary code execution via a crafted payload file, credential leakage
-in log output), please **do not open a public GitHub issue**.
-
-Instead, report it via one of these channels:
-
-1. **GitHub Private Security Advisory** (preferred):
-   `https://github.com/your-org/agentfuzz/security/advisories/new`
-
-2. **Email**: `security@your-org.example.com`
-
-Please include:
-- A description of the vulnerability
-- Steps to reproduce
-- Potential impact assessment
-- Any suggested mitigations you have in mind
-
-We aim to acknowledge all reports within **72 hours** and provide a fix or mitigation within
-**14 days** for critical issues.
-
-## Supported Versions
-
-| Version | Supported |
-|---------|-----------|
-| 0.1.x   | ✅ Yes    |
-
-## Responsible Use Reminder
-
-AgentFuzz must only be used against AI systems you own or have **explicit written authorisation**
-to test. Unauthorised use against third-party systems may violate computer fraud laws in your
-jurisdiction (CFAA, Computer Misuse Act, GDPR, etc.).
+Please open a private security advisory or email the maintainer rather than filing a public
+issue. We aim to acknowledge within a few days.

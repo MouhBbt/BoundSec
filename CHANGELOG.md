@@ -1,45 +1,43 @@
 # Changelog
 
-All notable changes to AgentFuzz are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to BoundSec are documented here.
+Format based on [Keep a Changelog](https://keepachangelog.com/).
 
----
+## [0.2.0] - 2026-09-06
 
-## [Unreleased]
-
-### Planned
-- LangChain/LangGraph real-agent example target
-- HTML report output (`--output-format html`)
-- Multi-turn attack sequences (stateful session fuzzing)
-- PyPI package distribution
-
----
-
-## [0.1.0] – 2026-07-22
+Major research-focused rewrite. BoundSec moves from a static payload-replay
+scanner to a **coverage-guided fuzzing framework** with a reproducible
+ground-truth benchmark and a full empirical evaluation.
 
 ### Added
-- **Fuzzing Harness** (`agentfuzz/core/harness.py`) — async aiohttp engine with semaphore
-  concurrency control, timeout handling, and full `AgentTrace` capture
-- **Mutator Engine** (`agentfuzz/core/mutator.py`) — `StaticMutator` with 6 text transforms
-  (homoglyph, whitespace padding, ROT-13, case-mixing, HTML comment embedding, truncation);
-  `LLMMutator` using any OpenAI-compatible API; `CompositeMutator` combining both
-- **Security Oracle** (`agentfuzz/core/oracle.py`) — `RuleBasedOracle` with 8 detection
-  categories (jailbreak, system prompt leak, unauthorized tool call, dangerous command exec,
-  path traversal, data exfiltration, token exhaustion, schema failures); `LLMJudgeOracle` for
-  deep behavioural analysis; `CompositeOracle` merging both with confidence boosting
-- **Reporter** (`agentfuzz/utils/reporter.py`) — Rich colour-coded terminal output with severity
-  sorting, category breakdown; JSON report export
-- **CLI** (`agentfuzz/cli.py`) — `fuzz` and `list-payloads` commands via Typer; `.env` autoload;
-  exit code 2 on vulnerabilities found (CI-friendly)
-- **Mock Vulnerable Target** (`tests/target_mock.py`) — FastAPI agent with 7 intentional
-  vulnerability classes for immediate testing
-- **Payload Library** (`agentfuzz/payloads/jailbreaks.json`) — 22 payloads across 8 attack
-  categories
-- **GitHub Actions CI** — unit tests (Python 3.12 + 3.13), integration tests, security fuzz run
-  with report artifact upload
-- **Docker support** — `Dockerfile` + `docker-compose.yml` for zero-setup execution
-- Initial documentation: `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `.env.example`
+- **Behavioural coverage** (`core/coverage.py`): a black-box analogue of edge
+  coverage for LLM agents over five dimensions (action, transition, guardrail,
+  fault, novelty), folded into an AFL-style bitmap. Includes a dependency-free
+  locality-sensitive SimHash for output novelty and a finite security-relevant
+  argument abstraction.
+- **Coverage-guided search** (`core/engine.py`, `core/corpus.py`,
+  `core/scheduler.py`): power-scheduled seed corpus + discounted-UCB operator
+  bandit driven by a blended coverage/compliance-gradient/bug reward.
+- **18 semantic mutation operators** across 9 attack families, plus crossover
+  (`core/operators.py`), replacing the 6 text transforms.
+- **The Agent Gym** (`targets/gym.py`): deterministic instrumented agents with
+  planted canaries, ground-truth labels, and 7 independently-toggleable defense
+  layers across a naive->frontier robustness spectrum.
+- **Live-model adapters** (`targets/live.py`): OpenAI/Groq-compatible and HTTP
+  agent targets that activate automatically when an API key is present.
+- **Detectors with continuous scores** (`core/oracle.py`): heuristic (weighted
+  noisy-OR), canary (ground-truth-assisted), and ensemble, enabling ROC/PR.
+- **Analysis suite** (`analysis/`): threshold-free detector metrics, bootstrap
+  CIs, Mann-Whitney U, and Vargha-Delaney A12; a 4-experiment evaluation and 13
+  publication figures + 2 methodology diagrams, all reproducible from a seed.
+- CLI sub-commands: `fuzz`, `experiment`, `figures`, `benchmark`, `operators`,
+  `seeds`.
+- 61-test suite covering every module and the empirical claims.
 
-[Unreleased]: https://github.com/your-org/agentfuzz/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-org/agentfuzz/releases/tag/v0.1.0
+### Changed
+- CLI rewritten around targets/strategies/detectors.
+- Report schema v2.0 (per-query rows with coverage and ground truth).
+
+### Removed
+- The single stateless HTTP harness and regex-only oracle (subsumed).
+- The old intentionally-vulnerable FastAPI mock (superseded by the gym).
